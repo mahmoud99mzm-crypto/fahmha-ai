@@ -16,6 +16,8 @@ export const config = {
   }
 };
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
@@ -68,60 +70,78 @@ export default async function handler(req, res) {
       parts: userParts
     });
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
-
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${PRIMARY_MODEL}:generateContent?key=${encodeURIComponent(apiKey.trim())}`;
 
-    let response;
-    try {
-      response = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        signal: controller.signal,
-        body: JSON.stringify({
-          system_instruction: {
-            parts: [{ text: SYSTEM_PROMPT }]
-          },
-          generationConfig: {
-            maxOutputTokens: 700,
-            temperature: 0.3,
-            thinkingConfig: {
-              thinkingBudget: 0
-            }
-          },
-          contents
-        })
-      });
-    } finally {
-      clearTimeout(timeoutId);
-    }
+    let lastStatus = 500;
+    let lastError = "حدث خطأ أثناء الاتصال بـ Gemini API.";
 
-    const data = await response.json().catch(() => ({}));
+    // محاولتان سريعتان جدًا مع مهلة قصيرة عشان نحافظ على السرعة
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 9000);
 
-    if (!response.ok) {
-      const apiMsg = data?.error?.message || "حدث خطأ أثناء الاتصال بـ Gemini API.";
-      if (/high demand|overloaded|try again|unavailable/i.test(apiMsg) || response.status === 503 || response.status === 429) {
-        return res.status(503).json({
-          error: "الموديل عليه ضغط حاليًا، اضغط إرسال مرة ثانية بعد لحظات."
+      let response;
+      try {
+        response = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          signal: controller.signal,
+          body: JSON.stringify({
+            system_instruction: {
+              parts: [{ text: SYSTEM_PROMPT }]
+            },
+            generationConfig: {
+              maxOutputTokens: 700,
+              temperature: 0.3,
+              thinkingConfig: {
+                thinkingBudget: 0
+              }
+            },
+            contents
+          })
         });
+      } finally {
+        clearTimeout(timeoutId);
       }
-      return res.status(response.status).json({ error: apiMsg });
+
+      const data = await response.json().catch(() => ({}));
+
+      if (response.ok) {
+        let answer =
+          data?.candidates?.[0]?.content?.parts?.[0]?.text ||
+          "لم أتمكن من استخراج إجابة الآن.";
+
+        if (!answer.includes("هل فهمت ولا أعيدها تاني")) {
+          answer = `${answer.trim()}\n\nهل فهمت ولا أعيدها تاني؟`;
+        }
+
+        return res.status(200).json({ answer });
+      }
+
+      lastStatus = response.status;
+      lastError = data?.error?.message || "حدث خطأ أثناء الاتصال بـ Gemini API.";
+
+      const isOverload =
+        response.status === 503 ||
+        response.status === 429 ||
+        /high demand|overloaded|try again|unavailable/i.test(lastError);
+
+      if (!isOverload) {
+        return res.status(lastStatus).json({ error: lastError });
+      }
+
+      if (attempt === 0) {
+        await sleep(300);
+      }
     }
 
-    let answer =
-      data?.candidates?.[0]?.content?.parts?.[0]?.text ||
-      "لم أتمكن من استخراج إجابة الآن.";
-
-    if (!answer.includes("هل فهمت ولا أعيدها تاني")) {
-      answer = `${answer.trim()}\n\nهل فهمت ولا أعيدها تاني؟`;
-    }
-
-    return res.status(200).json({ answer });
+    return res.status(503).json({
+      error: "الموديل عليه ضغط حاليًا، اضغط إرسال مرة ثانية بعد لحظات."
+    });
   } catch (err) {
     if (err?.name === "AbortError") {
       return res.status(504).json({
-        error: "الرد أخذ وقتًا أطول من 10 ثوانٍ، جرّب إرسال السؤال مرة أخرى."
+        error: "الرد أخذ وقتًا أطول من المتوقع، جرّب إرسال السؤال مرة أخرى."
       });
     }
 
