@@ -1,5 +1,5 @@
 
-const GOOGLE_CLIENT_ID = "256842256431-o81iququfj45de6h53l2qrjh4edor50r.apps.googleusercontent.com";
+const GOOGLE_CLIENT_ID = "256842256431-h4b0h12f6igg6kcjmp9udh2n1p3vicip.apps.googleusercontent.com";
 
 const chatArea = document.getElementById("chat-area");
 const chatForm = document.getElementById("chat-form");
