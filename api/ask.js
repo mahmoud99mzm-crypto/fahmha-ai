@@ -6,6 +6,11 @@ const SYSTEM_PROMPT = `أنت "فهمها" (fhmha-ai)، مساعد تعليمي 
 3. اجعل الشرح مركّزًا ومباشرًا لتجنب الإطالة والانتظار.
 4. اختم كل رد بعبارة: "هل فهمت ولا أعيدها تاني؟"`;
 
+const MODELS = [
+  "gemini-3.8-flash",
+  "gemini-2.5-flash"
+];
+
 export const config = {
   api: {
     bodyParser: {
@@ -13,6 +18,8 @@ export const config = {
     }
   }
 };
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -66,49 +73,73 @@ export default async function handler(req, res) {
       parts: userParts
     });
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 20000);
+    let lastError = null;
+    let lastStatus = 500;
 
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${encodeURIComponent(apiKey.trim())}`;
+    for (const model of MODELS) {
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey.trim())}`;
 
-    let response;
-    try {
-      response = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        signal: controller.signal,
-        body: JSON.stringify({
-          system_instruction: {
-            parts: [{ text: SYSTEM_PROMPT }]
-          },
-          generationConfig: {
-            maxOutputTokens: 1200,
-            temperature: 0.4
-          },
-          contents
-        })
-      });
-    } finally {
-      clearTimeout(timeoutId);
+      // محاولتان سريعتان لكل موديل عند الضغط المؤقت
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+        let response;
+        try {
+          response = await fetch(endpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            signal: controller.signal,
+            body: JSON.stringify({
+              system_instruction: {
+                parts: [{ text: SYSTEM_PROMPT }]
+              },
+              generationConfig: {
+                maxOutputTokens: 1100,
+                temperature: 0.4
+              },
+              contents
+            })
+          });
+        } finally {
+          clearTimeout(timeoutId);
+        }
+
+        const data = await response.json().catch(() => ({}));
+
+        if (response.ok) {
+          let answer =
+            data?.candidates?.[0]?.content?.parts?.[0]?.text ||
+            "لم أتمكن من استخراج إجابة الآن.";
+
+          if (!answer.includes("هل فهمت ولا أعيدها تاني")) {
+            answer = `${answer.trim()}\n\nهل فهمت ولا أعيدها تاني؟`;
+          }
+
+          return res.status(200).json({ answer });
+        }
+
+        lastStatus = response.status;
+        lastError = data?.error?.message || "حدث خطأ أثناء الاتصال بـ Gemini API.";
+
+        const isTemporaryOverload =
+          response.status === 503 ||
+          response.status === 429 ||
+          /high demand|overloaded|try again|unavailable/i.test(lastError);
+
+        if (!isTemporaryOverload) {
+          return res.status(lastStatus).json({ error: lastError });
+        }
+
+        if (attempt === 0) {
+          await sleep(450);
+        }
+      }
     }
 
-    const data = await response.json().catch(() => ({}));
-
-    if (!response.ok) {
-      return res.status(response.status).json({
-        error: data?.error?.message || "حدث خطأ أثناء الاتصال بـ Gemini API."
-      });
-    }
-
-    let answer =
-      data?.candidates?.[0]?.content?.parts?.[0]?.text ||
-      "لم أتمكن من استخراج إجابة الآن.";
-
-    if (!answer.includes("هل فهمت ولا أعيدها تاني")) {
-      answer = `${answer.trim()}\n\nهل فهمت ولا أعيدها تاني؟`;
-    }
-
-    return res.status(200).json({ answer });
+    return res.status(lastStatus).json({
+      error: "الخادم مضغوط حاليًا، جرّب إرسال السؤال مرة أخرى بعد ثوانٍ."
+    });
   } catch (err) {
     if (err?.name === "AbortError") {
       return res.status(504).json({
