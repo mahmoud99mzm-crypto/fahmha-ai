@@ -1,5 +1,5 @@
-// ضع هنا Google Client ID الكامل الخاص بك من Google Cloud Console
-const GOOGLE_CLIENT_ID = "256842256435-ضع_باقي_المعرف_هنا.apps.googleusercontent.com";
+
+const GOOGLE_CLIENT_ID = "256842256431-o81iququfj45de6h53l2qrjh4edor50r.apps.googleusercontent.com";
 
 const chatArea = document.getElementById("chat-area");
 const chatForm = document.getElementById("chat-form");
@@ -39,7 +39,7 @@ const clearChatBtn = document.getElementById("clear-chat-btn");
 const STORAGE_KEY = "fhmha_ai_user";
 let currentUser = loadSavedUser();
 let pendingPayload = null;
-let selectedImage = null; // { data: base64, mimeType: string, dataUrl: string, name: string }
+let selectedImage = null; 
 let webcamStream = null;
 let isBusy = false;
 let chatHistory = [];
