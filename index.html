@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>فهمها | fhmha-ai</title>
+  <link rel="stylesheet" href="/style.css" />
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <span class="logo-dot"></span>
+        <div>
+          <h1>فهمها <small>fhmha-ai</small></h1>
+        </div>
+      </div>
+      <div class="user-bar">
+        <button id="clear-chat-btn" class="ghost-btn" type="button" title="محادثة جديدة">محادثة جديدة</button>
+        <span id="user-badge" class="user-badge hidden"></span>
+        <button id="login-header-btn" class="primary-small-btn" type="button">تسجيل الدخول</button>
+        <button id="logout-btn" class="ghost-btn hidden" type="button">خروج</button>
+      </div>
+    </header>
+
+    <main id="chat-area" class="chat-area">
+      <div class="welcome-card">
+        <h2>أهلًا بك في «فهمها» 👋</h2>
+        <p>اكتب سؤالك أو اضغط على زر <strong>+</strong> لتصوير مسألة بالكاميرا أو رفع صورة وحلّها خطوة بخطوة.</p>
+        <div class="suggestions">
+          <button type="button" class="chip" data-q="اشرح لي الفرق بين باقي القسمة % والقسمة العادية في C++ بمثال">الفرق بين % و / في C++</button>
+          <button type="button" class="chip" data-q="إزاي أحسب ضرب متجهين وأعرف إذا كانوا متعامدين؟">تحديد تعامد المتجهات</button>
+          <button type="button" class="chip" data-q="اشرح لي فكرة الـ API ببساطة كأني في سنة أولى">إيه هو الـ API ببساطة؟</button>
+        </div>
+      </div>
+    </main>
+
+    <!-- معاينة الصورة المحددة قبل الإرسال -->
+    <div id="image-preview-bar" class="image-preview-bar hidden">
+      <div class="preview-info">
+        <img id="image-preview-thumb" src="" alt="معاينة الصورة" />
+        <span id="image-preview-name">صورة جاهزة للحل</span>
+      </div>
+      <button id="remove-image-btn" type="button" class="remove-img-btn" title="إزالة الصورة">✕</button>
+    </div>
+
+    <form id="chat-form" class="composer">
+      <!-- قائمة زر الإضافة (+) -->
+      <div class="attach-wrapper">
+        <button
+          id="plus-btn"
+          type="button"
+          class="plus-btn"
+          aria-label="إضافة صورة أو تصوير بالكاميرا"
+          aria-expanded="false"
+          title="تصوير بالكاميرا أو اختيار صورة"
+        >+</button>
+
+        <div id="attach-menu" class="attach-menu hidden" role="menu">
+          <button id="camera-option-btn" type="button" class="attach-item" role="menuitem">
+            <span class="attach-icon">📷</span>
+            <span>تصوير بالكاميرا</span>
+          </button>
+          <button id="gallery-option-btn" type="button" class="attach-item" role="menuitem">
+            <span class="attach-icon">🖼️</span>
+            <span>اختيار صورة من الجهاز</span>
+          </button>
+        </div>
+
+        <!-- مدخلات الملفات المخفية -->
+        <input id="camera-input" type="file" accept="image/*" capture="environment" class="hidden" />
+        <input id="gallery-input" type="file" accept="image/*" class="hidden" />
+      </div>
+
+      <textarea
+        id="question-input"
+        rows="1"
+        placeholder="اكتب سؤالك هنا أو ارفع صورة مسألة..."
+      ></textarea>
+      <button id="send-btn" type="submit" class="send-btn">إرسال</button>
+    </form>
+  </div>
+
+  <!-- نافذة كاميرا الويب للكمبيوتر إذا لم يفتح تطبيق الكاميرا -->
+  <div id="webcam-modal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-card webcam-card">
+      <h3>تصوير المسألة بالكاميرا 📷</h3>
+      <video id="webcam-video" autoplay playsinline class="webcam-video"></video>
+      <canvas id="webcam-canvas" class="hidden"></canvas>
+      <p id="webcam-status" class="auth-status"></p>
+      <div class="webcam-actions">
+        <button id="capture-photo-btn" type="button" class="primary-small-btn">التقاط الصورة</button>
+        <button id="close-webcam-btn" type="button" class="ghost-btn">إلغاء</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- نافذة تسجيل الدخول -->
+  <div id="auth-modal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-card">
+      <h3>تسجيل الدخول إلى «فهمها»</h3>
+      <p>سجّل دخولك بحساب Google للمتابعة وإرسال سؤالك أو صورتك.</p>
+
+      <div id="gsi-button-container" class="gsi-box"></div>
+      <p id="auth-status" class="auth-status"></p>
+
+      <div class="divider"><span>أو</span></div>
+
+      <button id="guest-login-btn" class="secondary-btn" type="button">
+        متابعة سريعة بدون انتظار (وضع التجربة)
+      </button>
+      <button id="close-modal-btn" class="ghost-btn full-btn" type="button">إغلاق</button>
+    </div>
+  </div>
+
+  <script src="/script.js"></script>
+</body>
+</html>
