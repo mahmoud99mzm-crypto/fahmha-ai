@@ -1,15 +1,12 @@
-const SYSTEM_PROMPT = `أنت "فهمها" (fhmha-ai)، مساعد تعليمي سريع، ودود، ودقيق.
+const SYSTEM_PROMPT = `أنت "فهمها" (fhmha-ai)، مساعد دراسي سريع ومباشر.
 
 قواعد الرد:
-1. ادخل في الشرح مباشرة دون مقدمات طويلة.
-2. إذا وُجدت صورة، اقرأها بدقة واشرح الحل في خطوات مختصرة وواضحة.
-3. اجعل الشرح مركّزًا ومباشرًا لتجنب الإطالة والانتظار.
-4. اختم كل رد بعبارة: "هل فهمت ولا أعيدها تاني؟"`;
+1. ادخل في الشرح مباشرة دون مقدمات أو إطالة.
+2. اشرح في نقاط قصيرة وواضحة مع مثال عملي مختصر عند الحاجة.
+3. إذا وُجدت صورة، اقرأها بدقة واكتب الحل في خطوات سريعة ومباشرة.
+4. اختم الرد بـ: "هل فهمت ولا أعيدها تاني؟"`;
 
-const MODELS = [
-  "gemini-3.8-flash",
-  "gemini-2.5-flash"
-];
+const PRIMARY_MODEL = "gemini-3.8-flash";
 
 export const config = {
   api: {
@@ -18,8 +15,6 @@ export const config = {
     }
   }
 };
-
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -44,11 +39,11 @@ export default async function handler(req, res) {
 
     const contents = [];
     if (Array.isArray(history)) {
-      for (const item of history.slice(-4)) {
+      for (const item of history.slice(-2)) {
         if (item?.role && item?.text) {
           contents.push({
             role: item.role === "user" ? "user" : "model",
-            parts: [{ text: String(item.text).slice(0, 1200) }]
+            parts: [{ text: String(item.text).slice(0, 600) }]
           });
         }
       }
@@ -65,7 +60,7 @@ export default async function handler(req, res) {
     }
 
     userParts.push({
-      text: cleanQuestion || "اشرح ما في الصورة أو حل المسألة بخطوات مختصرة وواضحة."
+      text: cleanQuestion || "اشرح ما في الصورة أو حل المسألة بخطوات سريعة ومختصرة."
     });
 
     contents.push({
@@ -73,77 +68,60 @@ export default async function handler(req, res) {
       parts: userParts
     });
 
-    let lastError = null;
-    let lastStatus = 500;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-    for (const model of MODELS) {
-      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey.trim())}`;
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${PRIMARY_MODEL}:generateContent?key=${encodeURIComponent(apiKey.trim())}`;
 
-      // محاولتان سريعتان لكل موديل عند الضغط المؤقت
-      for (let attempt = 0; attempt < 2; attempt++) {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 15000);
-
-        let response;
-        try {
-          response = await fetch(endpoint, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            signal: controller.signal,
-            body: JSON.stringify({
-              system_instruction: {
-                parts: [{ text: SYSTEM_PROMPT }]
-              },
-              generationConfig: {
-                maxOutputTokens: 1100,
-                temperature: 0.4
-              },
-              contents
-            })
-          });
-        } finally {
-          clearTimeout(timeoutId);
-        }
-
-        const data = await response.json().catch(() => ({}));
-
-        if (response.ok) {
-          let answer =
-            data?.candidates?.[0]?.content?.parts?.[0]?.text ||
-            "لم أتمكن من استخراج إجابة الآن.";
-
-          if (!answer.includes("هل فهمت ولا أعيدها تاني")) {
-            answer = `${answer.trim()}\n\nهل فهمت ولا أعيدها تاني؟`;
-          }
-
-          return res.status(200).json({ answer });
-        }
-
-        lastStatus = response.status;
-        lastError = data?.error?.message || "حدث خطأ أثناء الاتصال بـ Gemini API.";
-
-        const isTemporaryOverload =
-          response.status === 503 ||
-          response.status === 429 ||
-          /high demand|overloaded|try again|unavailable/i.test(lastError);
-
-        if (!isTemporaryOverload) {
-          return res.status(lastStatus).json({ error: lastError });
-        }
-
-        if (attempt === 0) {
-          await sleep(450);
-        }
-      }
+    let response;
+    try {
+      response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
+        body: JSON.stringify({
+          system_instruction: {
+            parts: [{ text: SYSTEM_PROMPT }]
+          },
+          generationConfig: {
+            maxOutputTokens: 700,
+            temperature: 0.3,
+            thinkingConfig: {
+              thinkingBudget: 0
+            }
+          },
+          contents
+        })
+      });
+    } finally {
+      clearTimeout(timeoutId);
     }
 
-    return res.status(lastStatus).json({
-      error: "الخادم مضغوط حاليًا، جرّب إرسال السؤال مرة أخرى بعد ثوانٍ."
-    });
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      const apiMsg = data?.error?.message || "حدث خطأ أثناء الاتصال بـ Gemini API.";
+      if (/high demand|overloaded|try again|unavailable/i.test(apiMsg) || response.status === 503 || response.status === 429) {
+        return res.status(503).json({
+          error: "الموديل عليه ضغط حاليًا، اضغط إرسال مرة ثانية بعد لحظات."
+        });
+      }
+      return res.status(response.status).json({ error: apiMsg });
+    }
+
+    let answer =
+      data?.candidates?.[0]?.content?.parts?.[0]?.text ||
+      "لم أتمكن من استخراج إجابة الآن.";
+
+    if (!answer.includes("هل فهمت ولا أعيدها تاني")) {
+      answer = `${answer.trim()}\n\nهل فهمت ولا أعيدها تاني؟`;
+    }
+
+    return res.status(200).json({ answer });
   } catch (err) {
     if (err?.name === "AbortError") {
       return res.status(504).json({
-        error: "استغرق الرد وقتًا أطول من المعتاد، جرّب إرسال السؤال مرة أخرى."
+        error: "الرد أخذ وقتًا أطول من 10 ثوانٍ، جرّب إرسال السؤال مرة أخرى."
       });
     }
 
