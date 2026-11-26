@@ -74,13 +74,14 @@ if (apiKeys.length === 0) {
       role: "user",
       parts: userParts
     });
-
+let lastStatus = 500;
+    let lastError = "حدث خطأ أثناء الاتصال بـ Gemini API.";
+    
     for (let k = 0; k < apiKeys.length; k++) {
   const apiKey = apiKeys[k];
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${PRIMARY_MODEL}:generateContent?key=${encodeURIComponent(apiKey.trim())}`;
 
-    let lastStatus = 500;
-    let lastError = "حدث خطأ أثناء الاتصال بـ Gemini API.";
+  
 
     // محاولتان سريعتان جدًا مع مهلة قصيرة عشان نحافظ على السرعة
     for (let attempt = 0; attempt < 2; attempt++) {
