@@ -32,7 +32,9 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "يرجى كتابة سؤال أو اختيار صورة أولاً." });
     }
 
-    const apiKey = process.env.GEMINI_API_KEY;
+    const apiKeys = [process.env.GEMINI_API_KEY,
+                    process.env.GEMINI_API_KEY]
+      
     if (!apiKey || !apiKey.trim()) {
       return res.status(500).json({
         error: "مفتاح GEMINI_API_KEY غير مضبوط في Environment Variables على Vercel."
