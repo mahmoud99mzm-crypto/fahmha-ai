@@ -156,8 +156,8 @@ let lastStatus = 500;
     return res.status(500).json({
       error: err?.message || "حدث خطأ داخلي في الخادم."
     });
-  }
-}
+  };
+};
   
 
 
