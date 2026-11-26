@@ -75,7 +75,9 @@ if (apiKeys.length === 0) {
       parts: userParts
     });
 
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${PRIMARY_MODEL}:generateContent?key=${encodeURIComponent(apiKey.trim())}`;
+    for (let k = 0; k < apiKeys.length; k++) {
+  const apiKey = apiKeys[k];
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${PRIMARY_MODEL}:generateContent?key=${encodeURIComponent(apiKey.trim())}`;
 
     let lastStatus = 500;
     let lastError = "حدث خطأ أثناء الاتصال بـ Gemini API.";
@@ -154,4 +156,5 @@ if (apiKeys.length === 0) {
       error: err?.message || "حدث خطأ داخلي في الخادم."
     });
   }
+}
 }
