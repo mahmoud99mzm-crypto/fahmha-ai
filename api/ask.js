@@ -6,7 +6,7 @@ const SYSTEM_PROMPT = `أنت "فهمها" (fhmha-ai)، مساعد دراسي س
 3. إذا وُجدت صورة، اقرأها بدقة واكتب الحل في خطوات سريعة ومباشرة.
 4. اختم الرد بـ: "هل فهمت ولا أعيدها تاني؟"`;
 
-const PRIMARY_MODEL = "gemini-3.8-flash";
+const PRIMARY_MODEL = "gemini-2.5-flash";
 
 export const config = {
   api: {
