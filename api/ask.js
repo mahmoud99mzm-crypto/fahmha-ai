@@ -11,9 +11,9 @@ const PRIMARY_MODEL = "gemini-3.8-flash";
 export const config = {
   api: {
     bodyParser: {
-      sizeLimit: "10mb"
-    }
-  }
+      sizeLimit: "10mb",
+    },
+  },
 };
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -32,17 +32,16 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "يرجى كتابة سؤال أو اختيار صورة أولاً." });
     }
 
-const apiKeys = [
-  process.env.GEMINI_API_KEY,
-  process.env.GEMINI_API_KEY_2,
-].filter(Boolean);
-    
-if (apiKeys.length === 0) {
-  return res.status(500).json({
-    error: "مفتاح GEMINI_API_KEY غير مضبوط في Environment Variables على Vercel."
-  });
-}
-    
+    const apiKeys = [
+      process.env.GEMINI_API_KEY,
+      process.env.GEMINI_API_KEY_2,
+    ].filter(Boolean);
+
+    if (apiKeys.length === 0) {
+      return res.status(500).json({
+        error: "مفتاح GEMINI_API_KEY غير مضبوط في Environment Variables على Vercel.",
+      });
+    }
 
     const contents = [];
     if (Array.isArray(history)) {
@@ -50,7 +49,7 @@ if (apiKeys.length === 0) {
         if (item?.role && item?.text) {
           contents.push({
             role: item.role === "user" ? "user" : "model",
-            parts: [{ text: String(item.text).slice(0, 600) }]
+            parts: [{ text: String(item.text).slice(0, 600) }],
           });
         }
       }
@@ -61,103 +60,106 @@ if (apiKeys.length === 0) {
       userParts.push({
         inline_data: {
           mime_type: String(image.mimeType),
-          data: String(image.data)
-        }
+          data: String(image.data),
+        },
       });
     }
 
     userParts.push({
-      text: cleanQuestion || "اشرح ما في الصورة أو حل المسألة بخطوات سريعة ومختصرة."
+      text: cleanQuestion || "اشرح ما في الصورة أو حل المسألة بخطوات سريعة ومختصرة.",
     });
 
     contents.push({
       role: "user",
-      parts: userParts
+      parts: userParts,
     });
-let lastStatus = 500;
+
+    let lastStatus = 503;
     let lastError = "حدث خطأ أثناء الاتصال بـ Gemini API.";
-    
+    let sawOverload = false;
+
     for (let k = 0; k < apiKeys.length; k++) {
-  const apiKey = apiKeys[k];
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${PRIMARY_MODEL}:generateContent?key=${encodeURIComponent(apiKey.trim())}`;
+      const apiKey = apiKeys[k].trim();
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${PRIMARY_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`;
 
-  
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 9000);
 
-    // محاولتان سريعتان جدًا مع مهلة قصيرة عشان نحافظ على السرعة
-    for (let attempt = 0; attempt < 2; attempt++) {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 9000);
-
-      let response;
-      try {
-        response = await fetch(endpoint, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          signal: controller.signal,
-          body: JSON.stringify({
-            system_instruction: {
-              parts: [{ text: SYSTEM_PROMPT }]
-            },
-            generationConfig: {
-              maxOutputTokens: 700,
-              temperature: 0.3,
-              thinkingConfig: {
-                thinkingBudget: 0
-              }
-            },
-            contents
-          })
-        });
-      } finally {
-        clearTimeout(timeoutId);
-      }
-
-      const data = await response.json().catch(() => ({}));
-
-      if (response.ok) {
-        let answer =
-          data?.candidates?.[0]?.content?.parts?.[0]?.text ||
-          "لم أتمكن من استخراج إجابة الآن.";
-
-        if (!answer.includes("هل فهمت ولا أعيدها تاني")) {
-          answer = `${answer.trim()}\n\nهل فهمت ولا أعيدها تاني؟`;
+        let response;
+        try {
+          response = await fetch(endpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            signal: controller.signal,
+            body: JSON.stringify({
+              system_instruction: {
+                parts: [{ text: SYSTEM_PROMPT }],
+              },
+              generationConfig: {
+                maxOutputTokens: 700,
+                temperature: 0.3,
+              },
+              contents,
+            }),
+          });
+        } finally {
+          clearTimeout(timeoutId);
         }
 
-        return res.status(200).json({ answer });
-      }
+        const data = await response.json().catch(() => ({}));
 
-      lastStatus = response.status;
-      lastError = data?.error?.message || "حدث خطأ أثناء الاتصال بـ Gemini API.";
+        if (response.ok) {
+          let answer =
+            data?.candidates?.[0]?.content?.parts?.[0]?.text ||
+            "لم أتمكن من استخراج إجابة الآن.";
 
-      const isOverload =
-        response.status === 503 ||
-        response.status === 429 ||
-        /high demand|overloaded|try again|unavailable/i.test(lastError);
+          if (!answer.includes("هل فهمت ولا أعيدها تاني")) {
+            answer = `${answer.trim()}\n\nهل فهمت ولا أعيدها تاني؟`;
+          }
 
-      if (!isOverload) {
-        return res.status(lastStatus).json({ error: lastError });
-      }
+          return res.status(200).json({ answer });
+        }
 
-      if (attempt === 0) {
-        await sleep(300);
+        lastStatus = response.status;
+        lastError = data?.error?.message || "حدث خطأ أثناء الاتصال بـ Gemini API.";
+
+        const isOverload =
+          response.status === 503 ||
+          response.status === 429 ||
+          /high demand|overloaded|try again|unavailable/i.test(lastError);
+
+        if (!isOverload) {
+          return res.status(lastStatus).json({ error: lastError });
+        }
+
+        sawOverload = true;
+        if (attempt === 0) {
+          await sleep(300);
+        }
       }
     }
 
-    return res.status(503).json({
-      error: "الموديل عليه ضغط حاليًا، اضغط إرسال مرة ثانية بعد لحظات."
-    });
+    if (sawOverload) {
+      return res.status(503).json({
+        error: "الموديل عليه ضغط حاليًا، اضغط إرسال مرة ثانية بعد لحظات.",
+      });
+    }
+
+    return res.status(lastStatus).json({ error: lastError });
   } catch (err) {
+    console.error("Handler error:", err);
+
     if (err?.name === "AbortError") {
       return res.status(504).json({
-        error: "الرد أخذ وقتًا أطول من المتوقع، جرّب إرسال السؤال مرة أخرى."
+        error: "الرد أخذ وقتًا أطول من المتوقع، جرّب إرسال السؤال مرة أخرى.",
       });
     }
 
     return res.status(500).json({
-      error: err?.message || "حدث خطأ داخلي في الخادم."
+      error: err?.message || "حدث خطأ داخلي في الخادم.",
+      details: String(err),
     });
-  };
-};
+  }
+}
   
-
-
